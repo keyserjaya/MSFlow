@@ -1,0 +1,42 @@
+{
+  "name": "gradio_constraint_canvas",
+  "version": "0.4.39",
+  "description": "Gradio UI packages",
+  "type": "module",
+  "author": "",
+  "license": "ISC",
+  "private": false,
+  "main_changeset": true,
+  "exports": {
+    ".": {
+      "gradio": "./Index.svelte",
+      "svelte": "./dist/Index.svelte",
+      "types": "./dist/Index.svelte.d.ts"
+    },
+    "./example": {
+      "gradio": "./Example.svelte",
+      "svelte": "./dist/Example.svelte",
+      "types": "./dist/Example.svelte.d.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@gradio/atoms": "0.24.0",
+    "@gradio/statustracker": "0.14.1",
+    "@gradio/utils": "0.12.2",
+    "svelte": "^5.48.0",
+    "three": "^0.168.0"
+  },
+  "devDependencies": {
+    "@gradio/preview": "0.16.2",
+    "@types/three": "^0.168.0"
+  },
+  "peerDependencies": {
+    "svelte": "^5.48.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gradio-app/gradio.git",
+    "directory": "js/fallback"
+  }
+}
