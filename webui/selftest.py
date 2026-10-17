@@ -12,6 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from webui import app as app_module  # noqa: E402
+from webui import test_msflow_export as export_tests  # noqa: E402
 from webui.skeleton import JOINT_CHAIN, NUM_JOINTS  # noqa: E402
 from webui.spec_schema import load_spec_file  # noqa: E402
 
@@ -268,6 +269,12 @@ def check_echo_shortcircuits() -> None:
     )
 
 
+def check_msflow_export() -> None:
+    export_tests.check_dict_schema()
+    export_tests.check_export_roundtrip()
+    export_tests.check_bridge_errors()
+
+
 def check_reference() -> None:
     ids = app_module.reference.list_ids()
     print(
@@ -278,6 +285,7 @@ def check_reference() -> None:
 if __name__ == "__main__":
     check_skeleton()
     check_roundtrip()
+    check_msflow_export()
     check_reference()
     check_canvas_value()
     check_canvas_handler()

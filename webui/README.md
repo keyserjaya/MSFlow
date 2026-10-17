@@ -106,3 +106,18 @@ uv run --group ui python webui/parity_check.py --spec kick --gpu cpu --num_steps
 ```
 
 (CUDA/tf32 introduces tiny float drift; use `--gpu cpu` for exact equality.)
+
+## Blender bridge
+
+Every run also writes `sample_XX.msflow.json` next to its other outputs
+(schema `msflow-motion` v1: 20 fps, `[T, 22, 3]` world joints, the sparse
+controls, and meta). Use `python -m webui.msflow_export --run
+generations/webui/<spec>/<timestamp>` to (re)export older runs. In Blender,
+install the small add-on under `blender_addon/` (see its README) to import a
+run, retarget it onto your armature, and land it as a new Action (optionally
+a muted NLA clip), with the constraint targets drawn as empties. The Run
+panel's **send to Blender** button pushes the files to the add-on's receiver
+over `127.0.0.1` (under WSL2 NAT also enable "bind all" + "bind all
+interfaces" in Blender, or just keep the add-on's folder watch on — it polls
+the shared output root). Export-side tests: `uv run --group ui python
+webui/test_msflow_export.py`.

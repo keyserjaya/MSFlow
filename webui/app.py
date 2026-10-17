@@ -36,6 +36,8 @@ if str(ROOT) not in sys.path:
 os.environ.setdefault("MPLBACKEND", "Agg")
 
 # isort: off
+from webui.blender_bridge import DEFAULT_PORT as BLENDER_PORT  # noqa: E402
+from webui.blender_bridge import push_motion, resolve_host_label  # noqa: E402
 from webui.reference import ReferenceState, ReferenceUnavailable  # noqa: E402
 from webui.runner import Runner, RunSettings  # noqa: E402
 from webui.skeleton import (  # noqa: E402
@@ -92,6 +94,7 @@ def _log(message: str) -> None:
 
 runner = Runner()
 reference = ReferenceState(ROOT / "datasets" / "HumanML3D")
+_last_run: dict[str, str] = {"dir": ""}
 
 
 # ---------------------------------------------------------------------------
@@ -1082,6 +1085,7 @@ def on_run(
         )
     except Exception:
         zip_path = ""
+    _last_run["dir"] = str(result.out_dir)
     status = (
         f"✅ wrote {result.out_dir}\n"
         f"seed {settings.seed} · cfg {settings.cfg} · steps {settings.num_steps} · "
@@ -1094,6 +1098,39 @@ def on_run(
     slots = [gr.update(value=value, visible=True) for value in shown]
     slots += [gr.update(visible=False)] * (MAX_VIDEO_SLOTS - len(shown))
     return (state, status, out_md, bundles, canvas_value(state), *slots)
+
+
+def on_send_to_blender(
+    run_dir: Any, host: str, port: Any
+) -> str:  # outputs: status
+    """Push the latest run's exported .msflow.json files to the Blender
+    bridge add-on (filename-based; the add-on imports over the shared drive
+    or from the same POST body's path)."""
+    folder = (str(run_dir or "").strip() or _last_run.get("dir", "")).strip()
+    if not folder or not Path(folder).is_dir():
+        return "📡 send to Blender: no run directory yet — generate first."
+    files = sorted(Path(folder).glob("sample_*.msflow.json"))
+    if not files:
+        return (
+            f"📡 send to Blender: no sample_*.msflow.json in {folder} — runs made "
+            "before the export hook need `python -m webui.msflow_export --run "
+            f"{folder}`."
+        )
+    target = (host or "auto").strip() or "auto"
+    port_value = int(port) if port is not None else BLENDER_PORT
+    lines = [f"📡 send to Blender → {resolve_host_label(target)}:{port_value}"]
+    failed = 0
+    for path in files:
+        ok, message = push_motion(path, host=target, port=port_value)
+        failed += 0 if ok else 1
+        lines.append(f"{'✅' if ok else '⛔'} {path.name}: {message}")
+    if failed:
+        lines.append(
+            "hint: start the receiver in Blender's N panel → MSFlow; under WSL2 "
+            "NAT also enable 'bind all' there and allow the firewall prompt, or "
+            "use the add-on's Import latest / watch folder."
+        )
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -1259,6 +1296,20 @@ def build_ui() -> gr.Blocks:
                 noise_mix_box = gr.Number(value=1.0, label="noise_mix_strength")
                 save_mp4_cb = gr.Checkbox(True, label="save .mp4")
                 save_gif_cb = gr.Checkbox(False, label="save .gif")
+            with gr.Row():
+                blender_host_box = gr.Textbox(
+                    value="auto",
+                    label="Blender host",
+                    interactive=True,
+                    info="auto = loopback, then the Windows host seen from WSL2; "
+                    "needs the bridge receiver running in Blender (N panel)",
+                )
+                blender_port = gr.Number(
+                    value=BLENDER_PORT, precision=0, label="Blender port"
+                )
+                send_btn = gr.Button(
+                    "📡 send to Blender (new action/clip)", size="sm"
+                )
 
         with gr.Row():
             spec_reload = gr.Dropdown(
@@ -1401,6 +1452,12 @@ def build_ui() -> gr.Blocks:
             ],
             outputs=[spec_state, status, out_dir_md, zip_file, canvas_el, *video_slots],
             queue=True,
+        )
+        send_btn.click(
+            on_send_to_blender,
+            inputs=[out_dir_md, blender_host_box, blender_port],
+            outputs=[status],
+            queue=False,
         )
     return demo
 

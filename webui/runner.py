@@ -29,6 +29,7 @@ from utils.raw_inpaint_common import (
     save_raw_inpaint_outputs,
 )
 from utils.raw_joint_utils import load_raw_joint_mean_std
+from webui.msflow_export import export_sample
 from webui.spec_schema import safe_spec_name
 
 # isort: on
@@ -235,6 +236,14 @@ class Runner:
             test_prompt_index=None,
             sparse_control_metadata=metadata,
         )
+        msflow_notes: list[str] = []
+        for index in range(samples_world.shape[0]):
+            try:
+                export_sample(out_dir, index)
+            except Exception as exc:  # never fail a finished generation here
+                msflow_notes.append(f"sample_{index:02d}: {exc}")
+        if msflow_notes:
+            print("[runner] msflow export warnings:", "; ".join(msflow_notes))
         videos = (
             [
                 str(out_dir / f"sample_{i:02d}.mp4")
