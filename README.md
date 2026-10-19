@@ -96,6 +96,19 @@ Outputs are written to
 
 </details>
 
+## 🎮 Unity runtime bridge
+
+Generate motion from text prompts (or sparse joint controls) at Unity **runtime**
+and drive a Humanoid Animator character with it. The WebSocket server runs in
+this repo's environment; the Unity side is the local package in `unity_bridge/`:
+
+```bash
+uv run --group server python webui/runtime_server.py --port 8766
+```
+
+See `unity_bridge/README.md` for install, the wire protocol, and usage
+(`blender_addon/README.md` covers the equivalent Blender flow).
+
 ## 🔥 Train and evaluate MSFlow
 <details>
 <summary><b>Train MSFlow models</b></summary>

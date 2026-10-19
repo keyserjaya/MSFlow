@@ -37,5 +37,8 @@ armature as a new Action.
   seconds at any scene frame rate; the scene fps is never modified.
 - The mapped minimum is: pelvis + one spine slot + both leg chains + both
   upper arms; unmapped joints keep their rest pose (fingers stay put).
+- Waypoint constraints (`role: "waypoint"` in the spec: pelvis x/z only)
+  import as larger `MSF_wp_*` empties — they mark the path the root traces,
+  not a locked torso.
 - Headless check (needs a `blender` executable on PATH):
   `blender --background --python blender_addon/tests/retarget_selftest.py`

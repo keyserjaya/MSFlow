@@ -79,11 +79,14 @@ FRAMERATE = 20  # HumanML3D fps
 SPECS_DIR = ROOT / "specs"
 BUNDLED_SPECS = ROOT / "sample" / "joint_control_specs"
 STAGES = ("early", "middle", "late")
+WAYPOINT_COLOR = "#E6A83C"  # pelvis path pins (A → B), distinct from stages
+WAYPOINT_JOINT = 0  # pelvis
+WAYPOINT_AXES = (0, 2)  # x/z only: height stays free so the walk stays alive
 MAX_VIDEO_SLOTS = 8
 MAX_REF_CHOICES = 500
 DEFAULT_JOINTS = (20, 21)  # left/right wrist — the paper's chair-drag example
 
-WEBUI_BUILD = "b6"
+WEBUI_BUILD = "b7"
 
 
 def _log(message: str) -> None:
@@ -128,6 +131,7 @@ def new_state() -> dict[str, Any]:
                     for j in DEFAULT_JOINTS
                 ],
                 "stage": "middle",
+                "role": "",
             }
         )
     return state
@@ -175,7 +179,11 @@ def _joint_row_from_reference(
 
 
 def _new_control(
-    state: dict[str, Any], frame: int, joints: list[int], stage: str = "middle"
+    state: dict[str, Any],
+    frame: int,
+    joints: list[int],
+    stage: str = "middle",
+    role: str = "",
 ) -> dict[str, Any]:
     return {
         "frame": int(frame),
@@ -185,6 +193,7 @@ def _new_control(
         "axes_raw": None,
         "values": [_joint_row_from_reference(state, j, frame) for j in joints],
         "stage": stage,
+        "role": role,
     }
 
 
@@ -204,8 +213,9 @@ def _common_status(state: dict[str, Any], warn: str = "", notice: str = "") -> s
     if CANVAS_READY:
         bits.append(
             "🖱 click a joint or constraint to select · drag the gizmo (axes "
-            "auto-constrain) · 🎯 constrain this frame pins the whole pose · "
-            "esc deselects"
+            "auto-constrain) · drag the gizmo's SQUARE to slide along the "
+            "ground · 🧭 waypoint = pelvis x/z pin, click it then drag · esc "
+            "or click empty space deselects"
         )
     if CANVAS_NOTE:
         bits.append(CANVAS_NOTE)
@@ -218,10 +228,16 @@ def _common_status(state: dict[str, Any], warn: str = "", notice: str = "") -> s
     control = _selected_control(state)
     if control is not None:
         names = ", ".join(JOINT_NAMES.get(j, f"j{j}") for j in control["joints"])
-        bits.append(
-            f"editing keyframe #{state['sel_kf'] + 1} · frame {control['frame']}"
-            + (f" · joints {names}" if names else "")
-        )
+        if control.get("role") == "waypoint":
+            bits.append(
+                f"editing WAYPOINT (pelvis x/z, height free) at frame "
+                f"{control['frame']} — the torso and legs stay animated"
+            )
+        else:
+            bits.append(
+                f"editing keyframe #{state['sel_kf'] + 1} · frame {control['frame']}"
+                + (f" · joints {names}" if names else "")
+            )
     else:
         bits.append(
             f"frame {int(state['frame'])} has no keyframe — drag a joint or use "
@@ -251,7 +267,12 @@ def canvas_value(state: dict[str, Any]) -> dict[str, Any]:
     markers_by_id: dict[str, dict[str, Any]] = {}
     for candidate in state["controls"]:
         c_frame = int(candidate["frame"])
-        color = STAGE_COLORS.get(candidate["stage"] or "middle", "#CC79A7")
+        role = str(candidate.get("role") or "")
+        color = (
+            WAYPOINT_COLOR
+            if role == "waypoint"
+            else STAGE_COLORS.get(candidate["stage"] or "middle", "#CC79A7")
+        )
         axes_names = [
             AXES_BY_INDEX[a] for a in (candidate["axes"] or [0, 1, 2]) if 0 <= a < 3
         ]
@@ -270,11 +291,22 @@ def canvas_value(state: dict[str, Any]) -> dict[str, Any]:
                 "axes": axes_names,
                 "color": color,
                 "controlled": True,
+                "waypoint": role == "waypoint",
                 "selected": bool(is_current and int(joint) == sel_flag),
             }
     markers = list(markers_by_id.values())
 
     lines: list[dict[str, Any]] = []
+    # ordered pelvis waypoints draw the A → B path the motion should trace
+    waypoint_track: list[list[float]] = []
+    for candidate in sorted(
+        (c for c in state["controls"] if c.get("role") == "waypoint"),
+        key=lambda c: int(c["frame"]),
+    ):
+        for row in candidate["values"]:
+            waypoint_track.append([float(row[0]), float(row[1]), float(row[2])])
+    if len(waypoint_track) >= 2:
+        lines.append({"points": waypoint_track, "color": WAYPOINT_COLOR})
     if control is not None:
         for joint in control["joints"]:
             track: list[list[float]] = []
@@ -301,7 +333,8 @@ def canvas_value(state: dict[str, Any]) -> dict[str, Any]:
 
 def _kf_choices(state: dict[str, Any]) -> list[str]:
     return [
-        f"#{i + 1} · frame {c['frame']} ({c['frame'] / FRAMERATE:.2f}s)"
+        f"#{i + 1} · {'waypoint' if c.get('role') == 'waypoint' else 'kf'} @ "
+        f"frame {c['frame']} ({c['frame'] / FRAMERATE:.2f}s)"
         for i, c in enumerate(state["controls"])
     ]
 
@@ -365,6 +398,7 @@ def spec_from_state(state: dict[str, Any]) -> Spec:
                 axes=[int(a) for a in control["axes"]],
                 values=[[float(v) for v in row] for row in control["values"]],
                 stage=control.get("stage", "middle"),
+                role=control.get("role", ""),
                 frame_fraction=control.get("frame_fraction"),
                 axes_raw=control.get("axes_raw"),
             )
@@ -711,6 +745,7 @@ def _snapshot_frame(state: dict[str, Any], frame: int, pose_rows: list[Any]) -> 
         "axes_raw": None,
         "values": values,
         "stage": stage,
+        "role": "",
     }
     if first_index is None:
         kept.append(pinned)
@@ -752,6 +787,49 @@ def on_add_keyframe(state: dict[str, Any], frame: int) -> tuple[Any, ...]:
     state["sel_joint"] = joints[0]
     state["frame"] = frame  # the scene follows the new keyframe
     return refresh(state, notice=f"added keyframe at frame {frame}")
+
+
+def on_add_waypoint(state: dict[str, Any], frame: int) -> tuple[Any, ...]:
+    """Pelvis path waypoint: pins joint 0's x/z at the current frame so the
+    root passes through the point (A → B → …) while height, torso and legs
+    stay animated — unlike locking a spine joint to a position."""
+    _clamp_spec(state)
+    frame = min(max(int(frame), 0), int(state["n_frames"]) - 1)
+    dedicated = [
+        index
+        for index, candidate in enumerate(state["controls"])
+        if int(candidate["frame"]) == frame and candidate.get("role") == "waypoint"
+    ]
+    if dedicated:
+        # repeated clicks keep the placed spot; only follow the marker
+        state["sel_kf"] = dedicated[0]
+        notice = f"waypoint already at frame {frame} — drag it or edit x/z below"
+    else:
+        absorbed = [
+            index
+            for index, candidate in enumerate(state["controls"])
+            if int(candidate["frame"]) == frame and WAYPOINT_JOINT in candidate["joints"]
+        ]
+        if absorbed:
+            # a shared keyframe already pins the pelvis here; reuse, don't clobber
+            shared = state["controls"][absorbed[0]]
+            shared["axes"] = sorted(set(shared["axes"]) | set(WAYPOINT_AXES))
+            state["sel_kf"] = absorbed[0]
+            notice = (
+                f"pelvis constraint exists at frame {frame} — keyframe reused "
+                "(unlock y here if you only want the path pin)"
+            )
+        else:
+            control = _new_control(
+                state, frame, [WAYPOINT_JOINT], role="waypoint"
+            )
+            control["axes"] = list(WAYPOINT_AXES)
+            state["controls"].append(control)
+            state["sel_kf"] = len(state["controls"]) - 1
+            notice = f"waypoint added at frame {frame} (pelvis x/z pin)"
+    state["sel_joint"] = WAYPOINT_JOINT
+    state["frame"] = frame
+    return refresh(state, notice=notice)
 
 
 def on_duplicate_keyframe(
@@ -1235,6 +1313,10 @@ def build_ui() -> gr.Blocks:
                 dup_btn = gr.Button("⧉ duplicate", size="sm")
                 del_btn = gr.Button("🗑 delete", size="sm")
             with gr.Row():
+                wp_btn = gr.Button(
+                    "🧭 waypoint @ current frame", size="sm"
+                )
+            with gr.Row():
                 kf_frame_slider = gr.Slider(
                     0,
                     starter["n_frames"] - 1,
@@ -1371,6 +1453,9 @@ def build_ui() -> gr.Blocks:
         )
         add_btn.click(
             on_add_keyframe, [spec_state, frame_slider], editor_outputs, **quiet
+        )
+        wp_btn.click(
+            on_add_waypoint, [spec_state, frame_slider], editor_outputs, **quiet
         )
         # every keyframe-scoped handler receives the dropdown's live value so a
         # select→act race can't retarget the edit to a stale keyframe

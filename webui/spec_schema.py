@@ -22,13 +22,16 @@ AXES_BY_INDEX: tuple[str, ...] = ("x", "y", "z")
 class Control:
     """One keyframe constraint. `values` is always per-joint world XYZ
     (shape (len(joints), 3)), matching the CLI loader. Only the selected
-    axes are masked as constraints; the rest ride along harmlessly."""
+    axes are masked as constraints; the rest ride along harmlessly.
+    `role` marks editor semantics ("waypoint" = pelvis path pin; the CLI
+    loader ignores the key)."""
 
     frame: int
     joints: list[int]
     axes: list[int]
     values: list[list[float]]
     stage: str = ""
+    role: str = ""
     frame_fraction: float | None = None
     # Original axes spelling, preserved so save→load round-trips byte-identically.
     axes_raw: str | None = None
@@ -54,6 +57,8 @@ class Control:
         out["values"] = [[float(v) for v in row] for row in self.values]
         if self.stage:
             out["stage"] = self.stage
+        if self.role:
+            out["role"] = self.role
         return out
 
 
@@ -150,6 +155,7 @@ def parse_spec(raw: dict) -> Spec:
             axes=axes,
             values=values,
             stage=str(entry.get("stage", "")),
+            role=str(entry.get("role", "")),
             frame_fraction=fraction,
             axes_raw=axes_raw,
         )

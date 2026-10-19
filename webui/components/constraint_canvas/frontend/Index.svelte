@@ -20,7 +20,7 @@
 	const gradio = new Gradio<ConstraintCanvasEvents, ConstraintCanvasProps>(props);
 
 	const container = true;
-	const BUILD = "b6";
+	const BUILD = "b7";
 	const LOG = (...args: unknown[]): void =>
 		console.log(`[canvas ${BUILD}]`, ...args);
 
@@ -65,7 +65,15 @@
 	const handleMeshes = new Map<string, THREE.Mesh>();
 	let markerInfo = new Map<
 		string,
-		{ frame: number; joint: number; axes: AxisName[]; color: string; controlled: boolean; pos: THREE.Vector3 }
+		{
+			frame: number;
+			joint: number;
+			axes: AxisName[];
+			color: string;
+			controlled: boolean;
+			waypoint: boolean;
+			pos: THREE.Vector3;
+		}
 	>();
 
 	let trajectoryGroup: THREE.Group;
@@ -321,10 +329,11 @@
 		joint: number,
 		pos: THREE.Vector3,
 		axes: AxisName[],
-		color: string
+		color: string,
+		waypoint = false
 	): THREE.Mesh {
 		const mesh = new THREE.Mesh(
-			new THREE.SphereGeometry(0.055, 20, 16),
+			new THREE.SphereGeometry(waypoint ? 0.075 : 0.055, 20, 16),
 			new THREE.MeshStandardMaterial({
 				color,
 				roughness: 0.4,
@@ -336,6 +345,12 @@
 		mesh.userData.joint = joint;
 		mesh.userData.axes = axes;
 		mesh.position.copy(pos);
+		if (waypoint) {
+			// path pins sit inside the body: draw through meshes so they stay
+			// visible/grabbable above the armature
+			(mesh.material as THREE.MeshStandardMaterial).depthTest = false;
+			mesh.renderOrder = 10;
+		}
 		return mesh;
 	}
 
@@ -392,15 +407,9 @@
 		if (!info) return;
 		LOG("click handle", { id, frame: info.frame, joint: info.joint, selected });
 		if (info.frame === currentFrame) {
-			// re-clicking the selected constraint toggles it off (deselect)
-			if (
-				selected &&
-				selected.frame === currentFrame &&
-				selected.joint === info.joint
-			) {
-				deselect();
-				return;
-			}
+			// selecting (re-)attaches the drag gizmo; deselecting is a click on
+			// empty space or Escape — re-clicking must never yank the gizmo
+			// away from someone trying to grab the marker
 			setSelection({ joint: info.joint, frame: currentFrame });
 			dispatchEvent({
 				action: "select",
@@ -420,16 +429,7 @@
 
 	function selectBaseJoint(joint: number): void {
 		LOG("click base joint", { joint, selected });
-		// re-clicking the selected joint (its ball sits under the gizmo)
-		// toggles it off — clicking "outside the gizmo arrows" must deselect
-		if (
-			selected &&
-			selected.frame === currentFrame &&
-			selected.joint === joint
-		) {
-			deselect();
-			return;
-		}
+		// selecting always (re-)attaches; empty-space click / Escape deselects
 		setSelection({ joint, frame: currentFrame });
 		dispatchEvent({
 			action: "select",
@@ -678,6 +678,7 @@
 				axes: m.axes && m.axes.length ? m.axes : ["x", "y", "z"],
 				color: m.color ?? HANDLE_COLOR_FALLBACK,
 				controlled: m.controlled !== false,
+				waypoint: m.waypoint === true,
 				pos: new THREE.Vector3(m.x, m.y ?? 0, m.z)
 			});
 		}
@@ -687,7 +688,7 @@
 			if (!info) continue;
 			let mesh = handleMeshes.get(id);
 			if (!mesh) {
-				mesh = newMeshHandle(id, m.joint, info.pos, info.axes, info.color);
+				mesh = newMeshHandle(id, m.joint, info.pos, info.axes, info.color, info.waypoint);
 				scene.add(mesh);
 				handleMeshes.set(id, mesh);
 			}
@@ -772,21 +773,26 @@
 
 		syncPlayback(value);
 
-		// selection sync (client-authoritative): the server's selection is
-		// adopted ONLY on a context switch (frame jump / first sync) — a
-		// same-frame response must never re-attach a gizmo the user dismissed
+		// selection sync (client-authoritative): adopt the server's selection
+		// when nothing is selected locally (button-driven re-issues like the
+		// waypoint/keyframe buttons should arm the gizmo immediately; ghost
+		// jumps arrive the same way) or when the local selection can no longer
+		// resolve. A same-frame response NEVER steals a live selection the
+		// user already has — only null selections get armed.
 		const serverSel = value.selected_joint ?? null;
 		let decision = "keep-client";
 		if (selected !== null && !selectionResolvable(selected)) {
-			if (serverSel !== null && frameSwitch) {
+			if (serverSel !== null) {
 				decision = "adopt-server(unresolvable)";
 				setSelection({ joint: serverSel, frame: currentFrame });
 			} else {
 				decision = "clear(unresolvable)";
 				setSelection(null);
 			}
-		} else if (selected === null && serverSel !== null && frameSwitch) {
-			decision = "adopt-server(frame-switch)";
+		} else if (selected === null && serverSel !== null) {
+			decision = frameSwitch
+				? "adopt-server(frame-switch)"
+				: "adopt-server(button)";
 			setSelection({ joint: serverSel, frame: currentFrame });
 		} else {
 			if (selected !== null) {

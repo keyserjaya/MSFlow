@@ -41,6 +41,17 @@ installed for `--group ui` invocations.
   preview armature matches the placed constraints ("estimated result"; the
   generated motion still comes from the model, which honors XYZ positions
   only).
+- **🧭 Waypoints** — pelvis path pins (joint 0, x/z only): the root passes
+  through point A then point B while height, torso and legs stay animated
+  (use these instead of spine constraints — pinning a spine joint drags the
+  torso rigidly and looks stiff). To move one: click the waypoint ball (it is
+  drawn larger and through the body) — the gizmo arms immediately; drag the
+  X/Z arrows, or drag the **square** (XZ plane handle) to slide it along the
+  ground. Clicking a selected marker never collapses the gizmo; deselect with
+  Esc or a click on empty space. Whether the marker is a ghost at another
+  frame, one click jumps the editing frame there with the gizmo armed.
+  Repeated 🧭 clicks select the placed waypoint; two or more draw the path
+  line through the ordered pins.
 - **🎯 Constrain this frame** — button in the viewport: captures the whole
   solved pose at the current frame (all 22 joints, x/y/z) as constraints,
   replacing that frame's keyframe.

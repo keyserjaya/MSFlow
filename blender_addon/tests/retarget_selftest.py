@@ -198,6 +198,7 @@ def main() -> int:
             "frame": 25,
             "axes": "x,z",
             "stage": "late",
+            "role": "waypoint",
             "values": [[-0.2, 0.9, 0.1]],
         },
     ]
@@ -230,6 +231,8 @@ def main() -> int:
             markers is not None and len(markers.objects) == 3,
             str(None if markers is None else len(markers.objects)),
         )
+        names = [item.name for item in markers.objects] if markers else []
+        check("waypoint markers named", any(name.startswith("MSF_wp_") for name in names), str(names))
         check(
             "leg scale 1 on identical rig",
             close(report.scale, 1.0, 1e-6),

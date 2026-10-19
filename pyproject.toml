@@ -47,6 +47,9 @@ dependencies = [
 # Sync/run them with: uv run --group ui python webui/app.py
 [dependency-groups]
 ui = ["gradio>=5.0", "gradio-constraint-canvas"]
+# Optional extras for the Unity runtime server (webui/runtime_server.py).
+# Sync/run them with: uv run --group server python webui/runtime_server.py
+server = ["websockets>=12"]
 
 [tool.uv.sources]
 en-core-web-sm = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl" }

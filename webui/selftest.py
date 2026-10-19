@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from webui import app as app_module  # noqa: E402
 from webui import test_msflow_export as export_tests  # noqa: E402
 from webui.skeleton import JOINT_CHAIN, NUM_JOINTS  # noqa: E402
-from webui.spec_schema import load_spec_file  # noqa: E402
+from webui.spec_schema import load_spec_file, parse_spec  # noqa: E402
 
 
 def canvas_slot_is_value(out: tuple) -> bool:
@@ -206,6 +206,68 @@ def check_keyframe_selection() -> None:
     print("keyframe selection ok (label wins over stale state; scrub keeps it)")
 
 
+def check_waypoints() -> None:
+    """Pelvis path waypoints: dedicated role=waypoint controls pinning joint
+    0 x/z only; repeats select in place; shared keyframes reuse cleanly."""
+    state = app_module.new_state()
+    out = app_module.on_add_waypoint(state, 60)
+    assert len(out) == 1 + len(app_module.EDIT_OUTPUTS)
+    control = app_module._selected_control(state)
+    assert control["joints"] == [0] and control["axes"] == [0, 2], control
+    assert control.get("role") == "waypoint" and control["frame"] == 60
+    assert len(state["controls"]) == 4
+
+    before = len(state["controls"])
+    out = app_module.on_add_waypoint(state, 60)
+    assert len(state["controls"]) == before, "waypoint repeat must not duplicate"
+    assert app_module._selected_control(state)["role"] == "waypoint"
+
+    value = app_module.canvas_value(state)
+    marker = next(
+        m for m in value["markers"] if m["frame"] == 60 and m["joint"] == 0
+    )
+    assert marker["waypoint"] is True, marker
+    assert marker["color"] == app_module.WAYPOINT_COLOR, marker
+
+    app_module.on_add_waypoint(state, 120)
+    value = app_module.canvas_value(state)
+    flagged = [m for m in value["markers"] if m.get("waypoint")]
+    assert len(flagged) == 2, flagged
+    assert any(
+        line["color"] == app_module.WAYPOINT_COLOR for line in value["lines"]
+    ), value["lines"]  # the A → B path line
+    assert "waypoint" in app_module._kf_choices(state)[state["sel_kf"]]
+    assert "WAYPOINT" in app_module._common_status(state)
+
+    # a shared keyframe that already pins the pelvis is absorbed, not clobbered
+    state["controls"].append(
+        {
+            "frame": 90,
+            "frame_fraction": None,
+            "joints": [0, 7],
+            "axes": [0, 1, 2],
+            "axes_raw": None,
+            "values": [[0.0, 0.9, 0.0], [0.1, 0.1, 0.0]],
+            "stage": "late",
+            "role": "",
+        }
+    )
+    app_module.on_add_waypoint(state, 90)
+    shared = app_module._selected_control(state)
+    assert shared["joints"] == [0, 7] and shared["axes"] == [0, 1, 2], shared
+    assert not shared.get("role"), shared  # stays a plain keyframe (y locked)
+    assert len(state["controls"]) == 6
+
+    # schema round-trip: role survives, role-less controls stay key-free
+    spec = app_module.spec_from_state(state)
+    doc = spec.to_json_dict()
+    roles = [entry.get("role", "") for entry in doc["controls"]]
+    assert roles.count("waypoint") == 2, roles
+    reparsed = parse_spec(doc)
+    assert [control.role for control in reparsed.controls] == roles
+    print("waypoints ok (role controls, repeats, absorbs, path line, round-trip)")
+
+
 def check_echo_shortcircuits() -> None:
     """Programmatic panel echoes must never re-emit the canvas value (each one
     used to rebuild the scene and reset freshly dragged constraints)."""
@@ -287,6 +349,7 @@ if __name__ == "__main__":
     check_roundtrip()
     check_msflow_export()
     check_reference()
+    check_waypoints()
     check_canvas_value()
     check_canvas_handler()
     check_keyframe_selection()

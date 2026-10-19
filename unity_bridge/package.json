@@ -1,0 +1,17 @@
+{
+  "name": "com.msflow.motion-bridge",
+  "version": "0.1.0",
+  "displayName": "MSFlow Motion Bridge",
+  "description": "Generate HumanML3D motion from text prompts (and sparse joint controls) on an MSFlow server and drive a Unity Animator humanoid character with it at runtime.",
+  "unity": "2021.3",
+  "dependencies": {
+    "com.unity.nuget.newtonsoft-json": "3.2.1"
+  },
+  "samples": [
+    {
+      "displayName": "Basic Demo",
+      "description": "Minimal scene with an input field, Generate button, progress display, and playback on a humanoid character you assign.",
+      "path": "Samples~/Basic"
+    }
+  ]
+}

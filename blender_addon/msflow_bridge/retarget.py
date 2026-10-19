@@ -438,15 +438,20 @@ def create_constraint_empties(
         joints = [int(joint) for joint in control.get("joints") or []]
         values = control.get("values") or []
         stage = str(control.get("stage", ""))
+        role = str(control.get("role", ""))
         axes = str(control.get("axes", ""))
+        is_waypoint = role == "waypoint"
         for slot, joint in enumerate(joints):
             row = values[slot] if slot < len(values) else [0.0, 0.0, 0.0]
             world = to_blender_space(np.asarray([row], dtype=np.float32), flip_facing)[0]
-            empty = bpy.data.objects.new(_empty_name(frame, joint), None)
+            empty = bpy.data.objects.new(
+                _empty_name(frame, joint, waypoint=is_waypoint), None
+            )
             empty.location = Vector(world) * scale
             empty.empty_display_type = "SPHERE"
-            empty.empty_display_size = 0.02
+            empty.empty_display_size = 0.04 if is_waypoint else 0.02
             empty["msflow_stage"] = stage
+            empty["msflow_role"] = role
             empty["msflow_axes"] = axes
             empty["msflow_joint"] = motion.joint_names[joint]
             collection.objects.link(empty)
@@ -466,8 +471,9 @@ def clear_constraint_empties() -> int:
     return removed
 
 
-def _empty_name(frame: int, joint: int) -> str:
-    return f"MSF_ctrl_f{int(frame):04d}_j{joint:02d}"
+def _empty_name(frame: int, joint: int, waypoint: bool = False) -> str:
+    kind = "wp" if waypoint else "ctrl"
+    return f"MSF_{kind}_f{int(frame):04d}_j{joint:02d}"
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -19,8 +19,10 @@ export interface CanvasMarker {
 	axes?: AxisName[]; // which position axes are constrained
 	color?: string;
 	controlled?: boolean;
+	waypoint?: boolean; // pelvis path pin (x/z only): bigger, drawn on top
 	selected?: boolean;
 }
+
 
 export interface CanvasLine {
 	points: [number, number, number][];
