@@ -36,6 +36,7 @@ namespace MSFlow.MotionBridge
         [SerializeField] private Text _progress;
         [SerializeField] private Button _generateButton;
         [SerializeField] private InputField _promptInput;
+        [SerializeField] private InputField _durationInp;
 
         private void Awake()
         {
@@ -125,6 +126,10 @@ namespace MSFlow.MotionBridge
             _generateButton.interactable = false;
             SetProgress("sending request …");
             var controls = PinStance ? StanceControls() : null;
+
+            if (_durationInp != null && !string.IsNullOrEmpty(_durationInp.text))
+                float.TryParse(_durationInp.text, out DurationSeconds);
+
             Request.Generate(prompt, DurationSeconds, controls, PinStance ? (int?)ConstraintSteps : null);
         }
 
